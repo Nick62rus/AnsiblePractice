@@ -1,31 +1,56 @@
 ---
-- name: Install Zabbix Agent 2
+- name: Install Zabbix Agent 2 on Multiple OS
   hosts: all
   become: true
 
   vars:
     zabbix_agent2_conf: "/etc/zabbix/zabbix_agent2.conf"
     zabbix_server_ip: "192.168.0.1"  # IP  Zabbix сервера
-    zabbix_version: "6.0" 
+    zabbix_version: "6.0"  # Версия Zabbix
 
   tasks:
-      - name: Add repo for Ubuntu/Debian OS
-        apt:
-          deb: "https://repo.zabbix.com/zabbix/{{ zabbix_version }}/{{ ansible_facts['distribution'] | lower }}/pool/main/z/zabbix-release/zabbix-release_{{ zabbix_version }}-2+{{ ansible_facts['distribution'] | lower }}{{ ansible_facts['distribution_version'] }}_all.deb"
-          state: present
+    - name: Ensure OS family is identified
+      debug:
+        var: ansible_facts['os_family']
 
-      - name: Update apt cache
-        apt:
-          update_cache: yes
+    - name: Install Zabbix Agent 2 on Debian/Ubuntu
+      when: ansible_facts['os_family'] == "Debian"
+      block:
+        - name: Add Zabbix repository for Debian/Ubuntu
+          apt:
+            deb: "https://repo.zabbix.com/zabbix/{{ zabbix_version }}/{{ ansible_facts['distribution'] | lower }}/pool/main/z/zabbix-release/zabbix-release_{{ zabbix_version }}-2+{{ ansible_facts['distribution'] | lower }}{{ ansible_facts['distribution_version'] }}_all.deb"
+            state: present
 
-      - name: Install Zabbix Agent 2
-        apt:
-          name: zabbix-agent2
-          state: present
+        - name: Update apt cache
+          apt:
+            update_cache: yes
 
-      - name: Configure Zabbix Agent 2
-        lineinfile:
-          path: "{{ zabbix_agent2_conf }}"
-          regexp: "^Server="
-          line: "Server={{ zabbix_server_ip }}"
-          backup: yes
+        - name: Install Zabbix Agent 2
+          apt:
+            name: zabbix-agent2
+            state: present
+
+    - name: Install Zabbix Agent 2 on CentOS/RHEL
+      when: ansible_facts['os_family'] == "RedHat"
+      block:
+        - name: Add Zabbix repository for CentOS/RHEL
+          yum:
+            name: "https://repo.zabbix.com/zabbix/{{ zabbix_version }}/rhel/{{ ansible_facts['distribution_major_version'] }}/x86_64/zabbix-release-{{ zabbix_version }}-2.el{{ ansible_facts['distribution_major_version'] }}.noarch.rpm"
+            state: present
+
+        - name: Install Zabbix Agent 2
+          yum:
+            name: zabbix-agent2
+            state: present
+
+    - name: Configure Zabbix Agent 2
+      lineinfile:
+        path: "{{ zabbix_agent2_conf }}"
+        regexp: "^Server="
+        line: "Server={{ zabbix_server_ip }}"
+        backup: yes
+
+    - name: Ensure Zabbix Agent 2 is running and enabled (Debian-based)
+      when: ansible_facts['os_family'] == "Debian"
+      systemd:
+        name: zabb
